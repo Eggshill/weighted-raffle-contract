@@ -279,7 +279,8 @@ contract WeightedRaffle is VRFConsumerBaseV2Upgradeable, OwnableUpgradeable {
     }
 
     function setEndTime(uint256 endTime_) external onlyOwner {
-        if (block.timestamp >= endTime || block.timestamp >= endTime_) revert AlreadyEnd();
+        if (block.timestamp >= endTime) revert AlreadyEnd();
+        if (startTime >= endTime_ || block.timestamp >= endTime_) revert IncorrectTime();
 
         endTime = endTime_;
     }
@@ -315,100 +316,3 @@ contract WeightedRaffle is VRFConsumerBaseV2Upgradeable, OwnableUpgradeable {
         return _rawMessageHash.toEthSignedMessageHash().recover(signature);
     }
 }
-
-/*
-function returnWinners public view returns (uint256[]) {
-    return _winners[](winnersLength);
-}
-
-/// @notice Explain to an end user what this does
-/// @dev Explain to a developer any extra details
-/// @return Documents the return variables of a contract’s function state variable
-/// @inheritdoc	Copies all missing tags from the base function (must be followed by the contract name)
-
-
-
-/// @notice Explain to an end user what this does
-/// @dev Explain to a developer any extra details
-/// @param Documents a parameter just like in doxygen (must be followed by parameter name)
-
-
-
-/*
-//update maxWeightedRandomKey with lowestWinnerIndex in the reservior
-function _updateReservior(
-    uint256 weightedRandomKey_,
-) internal {
-    uint256 _lowestWinnerIndex;
-
-    for(uint256 i=0; i<reserviorHeight; i++){
-        if(addressToKey[winners[i]] > weightedRandomKey_) {       
-        weightedRandomKey_ = addressToKey[winners[i]];
-        _lowestWinnerIndex = i;
-        }
-    }
-
-    if(maxWeightedRandomKey != weightedRandomKey_) maxWeightedRandomKey = weightedRandomKey_;   //更新maxWeightedRandomKay为当前数组中的maxWeightedRandomKay
-    if(weightedRandomKey_ > addressToKey[winner[lowestWinnerIndex]]) lowestWinnerIndex = _lowestWinnerIndex;    //如果拥有maxWeightedRandomKay的用户变了，lowestWinnerIndex也要更新
-
-    emit UpdateReservior(winners[lowestWinnerIndex], maxWeightedRandomKey, lowestWinnerIndex);
-} 
-
-   //replace lowest ranked winner in reservoir with new user
-    winners[lowestWinnerIndex] = (_requestIdToAddress[requestId], _weightedRandomKey);
-
-    //update maxWeightedRandomKey with lowestWinnerIndex in the reservior
-    uint256 _lowestWinnerIndex = lowestWinnerIndex;
-    for(uint256 i=0; i < winnersLength; i++){
-      if(winners[i].weightedRandomKey > _weightedRandomKey) {
-        _weightedRandomKey = winners[i].weightedRandomKey;
-        _lowestWinnerIndex = i;
-      }
-    }
-    lowestWinnerIndex = _lowestWinnerIndex;
-    maxWeightedRandomKey = _weightedRandomKey;
-
-    emit UpdateReservior(_requestIdToAddress[requestId], winners[_lowestWinnerIndex], _lowestWinnerIndex, maxWeightedRandomKey);
-  } else { 
-    emit Lost(_requestIdToAddress[requestId], _weightedRandomKey); 
-    }
-
-  delete _requestIdToAddress[requestId];
-}
-
-
-
-/*
-function updateReservior(uint256 replacedId, address newAddress, uint256 newKey) internal returns (){
-    winners[replacedId] = (newAddress, newKey);
-    if 
-
-
-    //find the biggest weightedRandomKey in the reservoir
-    for(uint256 i=0; i<reserviorHeight; i++){
-      if(winners[i].weightedRandomKey > newKey) {
-        newKey = winners[i].weightedRandomKey;
-        replacedId = i;
-      } 
-    }
-    //for next possible replacement
-    lowestWinnerIndex = replacedId;  
-    maxWeightedRandomKey = newKey;
-}
-
-
-
- function insertionSort(address tempAddress, uint256 key) internal view returns () {
-   // winners[reserviorHeight].weightedRandomKey is the biggest one ------> winners[0].weightedRandomKey is the smallest one  
-   // uint256 randomArrary[i] =                 //蓄水池中每个位置的加权随机值
-    for(uint256 i=reserviorHeight; i>0 && key<winners[i-1].weightedRandomKey; i--){
-      winners[i]=winners[i-1];    
-    }
-    winners[i].winnerAddress=tempAddress;
-    winners[i].weightedRandomKey=key;
-    reserviorHeight++;
-    if(reserviorHeight=winnersLength) maxWeightedRandomKey=key;
-  }
-*/
-
-//  if (!addressToIndex[waitlistAddress]) revert AlreadyInReservior();     //校验是否addressToIndex有赋值，保证蓄水池中的地址不重复, not neccessary here but maybe in case
