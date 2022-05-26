@@ -1,0 +1,42 @@
+{
+  "name": "10kpfp-contract",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "devDependencies": {
+    "@chainlink/contracts": "^0.4.0",
+    "@nomiclabs/hardhat-ethers": "^2.0.4",
+    "@nomiclabs/hardhat-etherscan": "^3.0.3",
+    "@nomiclabs/hardhat-waffle": "^2.0.2",
+    "@openzeppelin/contracts-upgradeable": "^4.4.2",
+    "@prb/math": "^2.5.0",
+    "chai": "^4.3.6",
+    "dotenv": "^16.0.0",
+    "erc721a": "^2.1.0",
+    "ethereum-waffle": "^3.4.0",
+    "ethers": "^5.5.4",
+    "hardhat": "^2.8.3",
+    "hardhat-abi-exporter": "^2.8.0",
+    "hardhat-contract-sizer": "^2.4.0",
+    "hardhat-gas-reporter": "^1.0.7",
+    "hardhat-log-remover": "^2.0.2",
+    "hardhat-storage-layout": "^0.1.6",
+    "prettier": "^2.5.1",
+    "prettier-plugin-solidity": "^1.0.0-beta.19",
+    "solidity-coverage": "^0.7.19"
+  },
+  "scripts": {
+    "test": "mocha"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://72521@github.com/editorai/10kpfp-contract.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/editorai/10kpfp-contract/issues"
+  },
+  "homepage": "https://github.com/editorai/10kpfp-contract#readme"
+}
