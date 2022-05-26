@@ -278,6 +278,9 @@ contract WeightedRaffle is VRFConsumerBaseV2Upgradeable, OwnableUpgradeable {
         endTime = endTime_;
     }
 
+    /**
+    @notice update the endTime to ethier extend the raffle or end it early.
+     */
     function setEndTime(uint256 endTime_) external onlyOwner {
         if (block.timestamp >= endTime) revert AlreadyEnd();
         if (startTime >= endTime_ || block.timestamp >= endTime_) revert IncorrectTime();
