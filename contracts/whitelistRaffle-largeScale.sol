@@ -129,7 +129,6 @@ contract WeightedRaffle is VRFConsumerBaseV2Upgradeable, OwnableUpgradeable {
     function fulfillRandomWords(uint256 requestId, uint256[] memory randomWords) internal override {
         //weighted random sampling, solidity adjusted A-RES algorithm, weightedRandomKey
         address _newAddress = _requestIdToAddress[requestId]; //这个局域变量是不是多余了，会浪费gas？
-        delete _requestIdToAddress[requestId]; //取得地址后不需要保留和requestID的关系
 
         //ensure weightedRandomKey not be infinity through ranging randomSeed of 1 ~ 999,999
         int256 randomSeed = int256(randomWords[0] % 1000000);
@@ -159,10 +158,12 @@ contract WeightedRaffle is VRFConsumerBaseV2Upgradeable, OwnableUpgradeable {
         }
 
         addressToKey[_newAddress] = _weightedRandomKey; //地址mapping到key，进入waitlist，以便后续比对更新蓄水池
-        delete _addressToWeight[_newAddress]; //已记录key，可以删除weight节省gas
-
+        
         //优先填充未满的蓄水池
         if (reserviorHeight < winnersLength) _fillReservior(_newAddress); //更新蓄水池中的地址及各参数
+
+        delete _requestIdToAddress[requestId]; //取得地址后不需要保留和requestID的关系
+        delete _addressToWeight[_newAddress]; //已记录key，可以删除weight节省gas
 
         emit Fullfilled(_newAddress, randomSeed, _weightedRandomKey, addressToKey[_newAddress] == 0 ? false : true); //最后一项为0代表落选，为1代表在蓄水池或候选名单
     }
@@ -180,11 +181,12 @@ contract WeightedRaffle is VRFConsumerBaseV2Upgradeable, OwnableUpgradeable {
         else if (addressToKey[waitlistAddress] < maxWeightedRandomKey) {
             //replace lowest ranked winner in reservoir with waitlist user
             addressToIndex[waitlistAddress] = addressToIndex[winners[lowestWinnerIndex]]; //复制被代替者的Index
-            delete addressToIndex[winners[lowestWinnerIndex]]; //删除被代替者的Index，踢入waitlist
-
+ 
             winners[lowestWinnerIndex] = waitlistAddress; //数组中老账户替换为新账户
 
             _updateReservior(); //update maxWeightedRandomKey with lowestWinnerIndex in the reservior 更新lowestWinner数据
+            
+            delete addressToIndex[winners[lowestWinnerIndex]]; //删除被代替者的Index，踢入waitlist
         }
 
         emit Updated(waitlistAddress, addressToIndex[waitlistAddress]); //最后一项为0代表未进蓄水池，非0代表进了蓄水池
@@ -216,10 +218,11 @@ contract WeightedRaffle is VRFConsumerBaseV2Upgradeable, OwnableUpgradeable {
             delete addressToIndex[msg.sender]; //exit reservior 删除退出者的Index，退出蓄水池
         }
 
-        delete addressToKey[msg.sender]; //exit waitlist 删除退出者的weightedRandomKey，之后不能再加入waitlist
         _addressToWeight[msg.sender] = 1; //mark exited address as randomWord requested
 
         emit ExitRaffle(msg.sender, reserviorHeight);
+        
+        delete addressToKey[msg.sender]; //exit waitlist forever
     }
 
     //update maxWeightedRandomKey with lowestWinnerIndex in the reservior
