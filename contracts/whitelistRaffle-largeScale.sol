@@ -27,7 +27,7 @@ contract WeightedRaffle is VRFConsumerBaseV2Upgradeable, OwnableUpgradeable {
     using ECDSAUpgradeable for bytes32;
 
     VRFCoordinatorV2Interface public constant VRF_COORDINATOR =
-        VRFCoordinatorV2Interface(0x6a2aad07396b36fe02a22b33cf443582f682c82f);
+        VRFCoordinatorV2Interface(0x6A2AAd07396B36Fe02a22b33cf443582f682c82f);
     bytes32 public constant KEY_HASH = 0xd4bb89654db74673a187bd804519e65e3f71a52bc55f11da7601a13dcf505314; //bsc testnet
 
     uint256 public reserviorHeight; //当前所有中奖者数量，也是当前蓄水池高度，不会超过winnersLength
