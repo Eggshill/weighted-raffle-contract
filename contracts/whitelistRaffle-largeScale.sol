@@ -8,7 +8,6 @@ import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@chainlink/contracts/src/v0.8/interfaces/VRFCoordinatorV2Interface.sol";
 import "@openzeppelin/contracts-upgradeable/utils/cryptography/ECDSAUpgradeable.sol";
 import "@prb/math/contracts/PRBMathSD59x18.sol";
-import "@prb/math/contracts/PRBMathUD60x18.sol";
 
 error NotRaffleTime();
 error WeightIsZero();

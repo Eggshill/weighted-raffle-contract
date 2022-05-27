@@ -43,10 +43,6 @@ module.exports = {
   networks: {
     hardhat: {
       initialBaseFeePerGas: 0, // workaround from https://github.com/sc-forks/solidity-coverage/issues/652#issuecomment-896330136 . Remove when that issue is closed.
-      forking: {
-        url: 'https://eth-rinkeby.alchemyapi.io/v2/0b5KgqOveaf-OzwFozFbOKwA8Oxxgx_t',
-        blockNumber: 10281782,
-      },
       accounts: {
         mnemonic: process.env.SEED !== undefined ? process.env.SEED : '',
       },
@@ -58,6 +54,11 @@ module.exports = {
     },
     rinkeby: {
       url: process.env.RINKEBY_URL || '',
+      accounts:
+        process.env.PRIVATE_KEY !== undefined ? [process.env.PRIVATE_KEY] : [],
+    },
+    bsctest: {
+      url: process.env.BSC_TEST_URL || '',
       accounts:
         process.env.PRIVATE_KEY !== undefined ? [process.env.PRIVATE_KEY] : [],
     },
@@ -99,13 +100,13 @@ module.exports = {
       path: './abi/',
       clear: true,
       flat: true,
-      only: ['NFT', 'Factory', 'ERC721AUpgradeable'],
+      only: ['WeightedRaffle'],
       spacing: 2,
       pretty: true,
     },
     {
       path: './abi/ugly',
-      only: ['NFT', 'Factory', 'ERC721AUpgradeable'],
+      only: ['WeightedRaffle'],
       clear: true,
       flat: true,
       pretty: false,
