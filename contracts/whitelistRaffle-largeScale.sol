@@ -139,14 +139,14 @@ contract WeightedRaffle is VRFConsumerBaseV2Upgradeable, OwnableUpgradeable {
         // uint256 _weightedRandomKey = (
         //     randomSeed == 0
         //         ? type(uint256).max //log2(0) = infinity
-        //         : uint256(((1e18 * (randomSeed / 1000000).log2()) / int256(_addressToWeight[_newAddress])).abs())
+        //         : uint256(( 1e18 * (randomSeed.log2() - 1000000.log2()) ) / int256(_addressToWeight[_newAddress])).abs())
         // );
 
         if (randomSeed == 0) {
             _weightedRandomKey = type(uint256).max;
         } else {
             _weightedRandomKey = uint256(
-                ((1e18 * (randomSeed / 1000000).log2()) / int256(_addressToWeight[_newAddress])).abs()
+                ((1e18 * (randomSeed.log2() - 1000000.log2()) / int256(_addressToWeight[_newAddress])).abs()
             );
         }
 
