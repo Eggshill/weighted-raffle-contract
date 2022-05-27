@@ -27,8 +27,8 @@ contract WeightedRaffle is VRFConsumerBaseV2Upgradeable, OwnableUpgradeable {
     using ECDSAUpgradeable for bytes32;
 
     VRFCoordinatorV2Interface public constant VRF_COORDINATOR =
-        VRFCoordinatorV2Interface(0x7a1BaC17Ccc5b313516C5E16fb24f7659aA5ebed);
-    bytes32 public constant KEY_HASH = 0x4b09e658ed251bcafeebbc69400383d49f344ace09b9576fe248bb02c003fe9f; //matic testnet
+        VRFCoordinatorV2Interface(0x6a2aad07396b36fe02a22b33cf443582f682c82f);
+    bytes32 public constant KEY_HASH = 0xd4bb89654db74673a187bd804519e65e3f71a52bc55f11da7601a13dcf505314; //bsc testnet
 
     uint256 public reserviorHeight; //当前所有中奖者数量，也是当前蓄水池高度，不会超过winnersLength
     uint256 public lowestWinnerIndex; //lowest ranked winner in reservoir, 0 ~ winnerSize-1, 当前所有中奖者数量，weightedRandomKey最大的，获奖概率最低的
@@ -90,7 +90,7 @@ contract WeightedRaffle is VRFConsumerBaseV2Upgradeable, OwnableUpgradeable {
         s_requestConfig = RequestConfig(
             KEY_HASH,
             subId_,
-            100000, //callbackGasLimit
+            2500000, //callbackGasLimit
             3, //requestConfirmations
             1 //numWords,
         );
