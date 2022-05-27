@@ -106,7 +106,7 @@ contract WeightedRaffle is VRFConsumerBaseV2Upgradeable, OwnableUpgradeable {
         //weight must be greator than 0
         if (weight == 0) revert WeightIsZero();
         //每个地址只能抽奖一次，addressToWeight或addressToKey初始化过就不可以再参加
-        if (_addressToWeight[msg.sender] == 0 && addressToKey[msg.sender] == 0) revert RepeatedRequest(); //改成metx tx后，msg.sender改成签名的用户
+        if (_addressToWeight[msg.sender] != 0 || addressToKey[msg.sender] != 0) revert RepeatedRequest(); //改成metx tx后，msg.sender改成签名的用户
         //校验签名是否正确，确保weight是可信来源
         if (!verifySignature(salt, msg.sender, weight, signature)) revert InvalidSignature();
 
