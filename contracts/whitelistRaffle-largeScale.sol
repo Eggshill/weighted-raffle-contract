@@ -270,7 +270,9 @@ contract WeightedRaffle is VRFConsumerBaseV2Upgradeable, OwnableUpgradeable {
     function setWinnersLength(uint256 length) external onlyOwner {
         if (block.timestamp >= startTime) revert AlreadyStart();
         if (length == 0) revert NoWinner();
-
+        
+        if (length > winnersLength) winners = new address[](length);
+        
         winnersLength = length;
     }
 
