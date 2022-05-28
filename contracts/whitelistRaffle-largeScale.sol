@@ -93,6 +93,8 @@ contract WeightedRaffle is VRFConsumerBaseV2Upgradeable, OwnableUpgradeable {
             3, //requestConfirmations
             1 //numWords,
         );
+        
+        winners = new address[](winnersLength_);
     }
 
     //***需要改为metx tx***
