@@ -10,13 +10,13 @@ import "@chainlink/contracts/src/v0.8/interfaces/VRFCoordinatorV2Interface.sol";
 
 contract Factory is Ownable, ReentrancyGuard {
     VRFCoordinatorV2Interface public constant VRF_COORDINATOR =
-        VRFCoordinatorV2Interface(0x6A2AAd07396B36Fe02a22b33cf443582f682c82f);
+        VRFCoordinatorV2Interface(0x6168499c0cFfCaCD319c818142124B7A15E857ab);
 
     address public weightedRaffleImplementation;
 
     uint64 public subscriptionId;
 
-    event CreateNFT(address indexed nftAddress);
+    event CreateWeightedRaffle(address indexed nftAddress);
 
     constructor() {
         weightedRaffleImplementation = address(new WeightedRaffle());
@@ -46,7 +46,7 @@ contract Factory is Ownable, ReentrancyGuard {
 
         WeightedRaffle(clonedWeightedRaffle).transferOwnership(msg.sender);
 
-        emit CreateNFT(clonedWeightedRaffle);
+        emit CreateWeightedRaffle(clonedWeightedRaffle);
     }
 
     function changeImplementation(address newImplementationAddress) public onlyOwner {
