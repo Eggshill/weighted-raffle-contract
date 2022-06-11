@@ -2,6 +2,8 @@
 
 pragma solidity ^0.8.4;
 
+import "./utils/ContextMixin.sol";
+import "./utils/NativeMetaTransaction.sol";
 import "./utils/VRFConsumerBaseV2Upgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
@@ -20,7 +22,7 @@ error AlreadyStart();
 error AlreadyEnd();
 error IncorrectTime();
 
-contract WeightedRaffle is VRFConsumerBaseV2Upgradeable, OwnableUpgradeable {
+contract WeightedRaffle is VRFConsumerBaseV2Upgradeable, NativeMetaTransaction, OwnableUpgradeable, ContextMixin {
     using PRBMathSD59x18 for int256;
     // using PRBMathUD60x18 for uint256;
     using ECDSAUpgradeable for bytes32;
@@ -93,8 +95,15 @@ contract WeightedRaffle is VRFConsumerBaseV2Upgradeable, OwnableUpgradeable {
             3, //requestConfirmations
             1 //numWords,
         );
-        
+
         winners = new address[](winnersLength_);
+    }
+
+    /**
+     * This is used instead of msg.sender as transactions won't be sent by the original token owner, but by OpenSea.
+     */
+    function _msgSender() internal view override returns (address sender) {
+        return ContextMixin.msgSender();
     }
 
     //***需要改为metx tx***
@@ -107,9 +116,9 @@ contract WeightedRaffle is VRFConsumerBaseV2Upgradeable, OwnableUpgradeable {
         //weight must be greator than 0
         if (weight == 0) revert WeightIsZero();
         //每个地址只能抽奖一次，addressToWeight或addressToKey初始化过就不可以再参加
-        if (_addressToWeight[msg.sender] != 0 || addressToKey[msg.sender] != 0) revert RepeatedRequest(); //改成metx tx后，msg.sender改成签名的用户
+        if (_addressToWeight[_msgSender()] != 0 || addressToKey[_msgSender()] != 0) revert RepeatedRequest(); //改成metx tx后，msg.sender改成签名的用户
         //校验签名是否正确，确保weight是可信来源
-        if (!verifySignature(salt, msg.sender, weight, signature)) revert InvalidSignature();
+        if (!verifySignature(salt, _msgSender(), weight, signature)) revert InvalidSignature();
 
         RequestConfig memory rc = s_requestConfig;
         uint256 requestId = VRF_COORDINATOR.requestRandomWords(
@@ -121,10 +130,10 @@ contract WeightedRaffle is VRFConsumerBaseV2Upgradeable, OwnableUpgradeable {
         );
 
         //用以区分不同用户请求的随机数及其抽奖weight Return the requestId to the requester.
-        _requestIdToAddress[requestId] = msg.sender;
-        _addressToWeight[msg.sender] = weight;
+        _requestIdToAddress[requestId] = _msgSender();
+        _addressToWeight[_msgSender()] = weight;
 
-        emit Requested(msg.sender, weight, requestId);
+        emit Requested(_msgSender(), weight, requestId);
     }
 
     function fulfillRandomWords(uint256 requestId, uint256[] memory randomWords) internal override {
@@ -159,7 +168,7 @@ contract WeightedRaffle is VRFConsumerBaseV2Upgradeable, OwnableUpgradeable {
         }
 
         addressToKey[_newAddress] = _weightedRandomKey; //地址mapping到key，进入waitlist，以便后续比对更新蓄水池
-        
+
         //优先填充未满的蓄水池
         if (reserviorHeight < winnersLength) _fillReservior(_newAddress); //更新蓄水池中的地址及各参数
 
@@ -182,11 +191,11 @@ contract WeightedRaffle is VRFConsumerBaseV2Upgradeable, OwnableUpgradeable {
         else if (addressToKey[waitlistAddress] < maxWeightedRandomKey) {
             //replace lowest ranked winner in reservoir with waitlist user
             addressToIndex[waitlistAddress] = addressToIndex[winners[lowestWinnerIndex]]; //复制被代替者的Index
- 
+
             winners[lowestWinnerIndex] = waitlistAddress; //数组中老账户替换为新账户
 
             _updateReservior(); //update maxWeightedRandomKey with lowestWinnerIndex in the reservior 更新lowestWinner数据
-            
+
             delete addressToIndex[winners[lowestWinnerIndex]]; //删除被代替者的Index，踢入waitlist
         }
 
@@ -195,12 +204,12 @@ contract WeightedRaffle is VRFConsumerBaseV2Upgradeable, OwnableUpgradeable {
 
     //***需要改为metx tx*** 某些用户希望退出抽奖，先退出蓄水池，再退出waitlist
     function exitRaffle() external {
-        if (addressToKey[msg.sender] == 0) revert NotListed();
+        if (addressToKey[_msgSender()] == 0) revert NotListed();
 
         //优先从蓄水池退出
-        if (addressToIndex[msg.sender] > 0) {
+        if (addressToIndex[_msgSender()] > 0) {
             //改成metx tx后，msg.sender改成签名的用户
-            uint256 _index = addressToIndex[msg.sender] - 1;
+            uint256 _index = addressToIndex[_msgSender()] - 1;
 
             reserviorHeight--;
 
@@ -209,21 +218,21 @@ contract WeightedRaffle is VRFConsumerBaseV2Upgradeable, OwnableUpgradeable {
                 //将数组最后一位补充上来，除非退出者刚好是最后一位
                 if (_index < reserviorHeight) {
                     winners[_index] = winners[reserviorHeight];
-                    addressToIndex[winners[_index]] = addressToIndex[msg.sender];
+                    addressToIndex[winners[_index]] = addressToIndex[_msgSender()];
                 }
 
                 if (lowestWinnerIndex == _index) _updateReservior(); //如果删除的刚好是lowestWinner，要再更新一遍蓄水池最差值
             }
 
             delete winners[reserviorHeight];
-            delete addressToIndex[msg.sender]; //exit reservior 删除退出者的Index，退出蓄水池
+            delete addressToIndex[_msgSender()]; //exit reservior 删除退出者的Index，退出蓄水池
         }
 
-        _addressToWeight[msg.sender] = 1; //mark exited address as randomWord requested
+        _addressToWeight[_msgSender()] = 1; //mark exited address as randomWord requested
 
-        emit ExitRaffle(msg.sender, reserviorHeight);
-        
-        delete addressToKey[msg.sender]; //exit waitlist forever
+        emit ExitRaffle(_msgSender(), reserviorHeight);
+
+        delete addressToKey[_msgSender()]; //exit waitlist forever
     }
 
     //update maxWeightedRandomKey with lowestWinnerIndex in the reservior
@@ -270,9 +279,9 @@ contract WeightedRaffle is VRFConsumerBaseV2Upgradeable, OwnableUpgradeable {
     function setWinnersLength(uint256 length) external onlyOwner {
         if (block.timestamp >= startTime) revert AlreadyStart();
         if (length == 0) revert NoWinner();
-        
+
         if (length > winnersLength) winners = new address[](length);
-        
+
         winnersLength = length;
     }
 
