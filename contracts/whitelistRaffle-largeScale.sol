@@ -29,7 +29,7 @@ contract WeightedRaffle is VRFConsumerBaseV2Upgradeable, NativeMetaTransaction, 
 
     VRFCoordinatorV2Interface public constant VRF_COORDINATOR =
         VRFCoordinatorV2Interface(0x6168499c0cFfCaCD319c818142124B7A15E857ab);
-    bytes32 public constant KEY_HASH = 0xd4bb89654db74673a187bd804519e65e3f71a52bc55f11da7601a13dcf505314; //bsc testnet
+    bytes32 public constant KEY_HASH = 0xd89b2bf150e3b9e13446986e571fb9cab24b13cea0a43ea20a6049a85cc807cc; //rinkeby testnet
 
     uint256 public reserviorHeight; //当前所有中奖者数量，也是当前蓄水池高度，不会超过winnersLength
     uint256 public lowestWinnerIndex; //lowest ranked winner in reservoir, 0 ~ winnerSize-1, 当前所有中奖者数量，weightedRandomKey最大的，获奖概率最低的
