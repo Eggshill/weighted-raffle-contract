@@ -2,7 +2,7 @@
 
 pragma solidity ^0.8.4;
 
-import "./whitelistRaffle-largeScale.sol";
+import "./WeightedRaffle.sol";
 import "@openzeppelin/contracts/proxy/Clones.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
