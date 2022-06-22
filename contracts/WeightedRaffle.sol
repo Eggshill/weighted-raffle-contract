@@ -32,7 +32,7 @@ contract WeightedRaffle is VRFConsumerBaseV2Upgradeable, NativeMetaTransaction, 
     using ECDSAUpgradeable for bytes32;
 
     VRFCoordinatorV2Interface public constant VRF_COORDINATOR =
-        VRFCoordinatorV2Interface(0x7a1bac17ccc5b313516c5e16fb24f7659aa5ebed);
+        VRFCoordinatorV2Interface(0x7a1BaC17Ccc5b313516C5E16fb24f7659aA5ebed);
     bytes32 public constant KEY_HASH = 0x4b09e658ed251bcafeebbc69400383d49f344ace09b9576fe248bb02c003fe9f; //mumbai testnet
     
     /// @notice lowest ranked winner in reservoir

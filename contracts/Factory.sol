@@ -11,7 +11,7 @@ import "@chainlink/contracts/src/v0.8/interfaces/VRFCoordinatorV2Interface.sol";
 
 contract Factory is Ownable, ReentrancyGuard {
     VRFCoordinatorV2Interface public constant VRF_COORDINATOR =
-        VRFCoordinatorV2Interface(0x7a1bac17ccc5b313516c5e16fb24f7659aa5ebed);  // mumbai testnet
+        VRFCoordinatorV2Interface(0x7a1BaC17Ccc5b313516C5E16fb24f7659aA5ebed);  // mumbai testnet
 
     address public weightedRaffleImplementation;
 
