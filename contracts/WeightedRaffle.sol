@@ -103,6 +103,7 @@ contract WeightedRaffle is VRFConsumerBaseV2Upgradeable, NativeMetaTransaction, 
     ) public initializer {
         __Ownable_init_unchained();
         __VRFConsumerBaseV2_init(address(VRF_COORDINATOR));
+        _initializeEIP712('WeightedRaffle');
 
         startTime = startTime_;
         endTime = endTime_;
