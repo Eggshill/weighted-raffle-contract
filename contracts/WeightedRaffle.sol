@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: MIT
+// @author Eggshill
 
 pragma solidity ^0.8.4;
 
@@ -21,25 +22,40 @@ error NoWinner();
 error AlreadyStart();
 error AlreadyEnd();
 error IncorrectTime();
+error ZeroAddress();
 
+/// @title weighted raffle with reservior sampling
+/// @author Eggshill
 contract WeightedRaffle is VRFConsumerBaseV2Upgradeable, NativeMetaTransaction, OwnableUpgradeable, ContextMixin {
+    /// @dev using PRBMathUD60x18 for uint256;
     using PRBMathSD59x18 for int256;
-    // using PRBMathUD60x18 for uint256;
     using ECDSAUpgradeable for bytes32;
 
     VRFCoordinatorV2Interface public constant VRF_COORDINATOR =
-        VRFCoordinatorV2Interface(0x6168499c0cFfCaCD319c818142124B7A15E857ab);
-    bytes32 public constant KEY_HASH = 0xd89b2bf150e3b9e13446986e571fb9cab24b13cea0a43ea20a6049a85cc807cc; //rinkeby testnet
+        VRFCoordinatorV2Interface(0x7a1BaC17Ccc5b313516C5E16fb24f7659aA5ebed);
+    bytes32 public constant KEY_HASH = 0x4b09e658ed251bcafeebbc69400383d49f344ace09b9576fe248bb02c003fe9f; //mumbai testnet
+    
+    /// @notice lowest ranked winner in reservoir
+    /// @dev in the ranged of 0 to winnerSize-1
+    uint256 public lowestWinnerIndex;
 
-    uint256 public reserviorHeight; //当前所有中奖者数量，也是当前蓄水池高度，不会超过winnersLength
-    uint256 public lowestWinnerIndex; //lowest ranked winner in reservoir, 0 ~ winnerSize-1, 当前所有中奖者数量，weightedRandomKey最大的，获奖概率最低的
-    uint256 public maxWeightedRandomKey; //worst weightedRandomKey, 最小获奖概率, 蓄水池当前最大的加权随机值
+    /// @notice worst weightedRandomKey in reservior
+    /// @dev bigger weightedRandomKey means smaller probablity to win
+    uint256 public maxWeightedRandomKey; 
 
-    //合约初始化时入参赋值
     uint256 public startTime;
     uint256 public endTime;
-    uint256 public winnersLength; //also the size of reservoir, 也是蓄水池的最高高度，初始化是必须大于0
+
+    /// @notice Number of winners in this raffle.
+    /// @dev Also the size of reservoir, require greater than zero.
+    uint256 public winnersNumber;
+
+    /// @notice Signer of trusted source of weight.
     address public signer;
+
+    /// @notice Array of winners in reservior.
+    address[] public winners;
+
     struct RequestConfig {
         bytes32 keyHash;
         uint64 subId;
@@ -49,43 +65,49 @@ contract WeightedRaffle is VRFConsumerBaseV2Upgradeable, NativeMetaTransaction, 
     }
     RequestConfig public s_requestConfig;
 
-    mapping(uint256 => address) private _requestIdToAddress; //对应随机数与用户地址
-    mapping(address => uint256) private _addressToWeight; //对应用户地址与其权重
-    mapping(address => uint256) public addressToKey; //对应用户地址与其weightedRandomKey, waitlist用户使用
-    mapping(address => uint256) public addressToIndex; //对应用户地址与其在winners数据中的位置，1 ~ winnersLength
+    mapping(uint256 => address) private _requestIdToAddress;
+    mapping(address => uint256) private _addressToWeight;
 
-    address[] public winners; //the reservior, 存储蓄水池中winner地址列表
+    /// @notice WeightedRandomKey of user.
+    mapping(address => uint256) public addressToKey;
 
-    //对任何涉及可能改变蓄水池参数的事件，都暴露出当前蓄水池最新的参数
+    /// @notice User's index in the array of winners.
+    /// @dev In the range of 1 to winnersNumber.
+    mapping(address => uint256) public addressToIndex;
+
+    // Emit all events which changes varibles of reservior for off-chain verification.
     event Requested(address indexed newAddress, uint256 weight, uint256 requestID);
     event FillReservior(
         address indexed newAddress,
         uint256 addressToKey,
         uint256 reserviorHeight,
-        address indexed lowestWinnerAddress,
+        address indexed lowestWinner,
         uint256 maxWeightedRandomKey,
         uint256 lowestWinnerIndex
     );
-    event Fullfilled(address indexed newAddress, int256 randomSeed, uint256 weightedRandomKey, bool listed);
-    event UpdateReservior(address indexed lowestWinnerAddress, uint256 lowestWinnerIndex, uint256 maxWeightedRandomKey);
+    event Fullfilled(address indexed newAddress, int256 randomSeed, uint256 weightedRandomKey);
+    event UpdateReservior(
+        address indexed lowestWinner, 
+        uint256 lowestWinnerIndex, 
+        uint256 maxWeightedRandomKey
+    );
     event Updated(address indexed waitlistAddress, uint256 addressToIndex);
     event ExitRaffle(address indexed listedAddress, uint256 reserviorHeight);
-    event IncreaseWinnersLength(uint256 winnersLength);
-    event DecreaseWinnersLength(uint256 winnersLength);
 
     function initialize(
         uint256 startTime_,
         uint256 endTime_,
-        uint256 winnersLength_,
+        uint256 winnersNumber_,
         address signer_,
         uint64 subId_
     ) public initializer {
         __Ownable_init_unchained();
         __VRFConsumerBaseV2_init(address(VRF_COORDINATOR));
+        _initializeEIP712('WeightedRaffle');
 
         startTime = startTime_;
         endTime = endTime_;
-        winnersLength = winnersLength_;
+        winnersNumber = winnersNumber_;
         signer = signer_;
 
         s_requestConfig = RequestConfig(
@@ -95,29 +117,26 @@ contract WeightedRaffle is VRFConsumerBaseV2Upgradeable, NativeMetaTransaction, 
             3, //requestConfirmations
             1 //numWords,
         );
-
-        winners = new address[](winnersLength_);
     }
 
-    /**
-     * This is used instead of msg.sender as transactions won't be sent by the original token owner, but by OpenSea.
-     */
+    /// @dev This is used instead of msg.sender as transactions won't be sent by the original token owner, but by OpenSea.
     function _msgSender() internal view override returns (address sender) {
         return ContextMixin.msgSender();
     }
 
-    //***需要改为metx tx***
+    /// @notice Drawing of raffle
     function requestRandomWords(
         uint256 weight,
         string calldata salt,
         bytes calldata signature
     ) external {
         if (!isRaffleTime()) revert NotRaffleTime();
-        //weight must be greator than 0
+        // Weight must be greator than 0
         if (weight == 0) revert WeightIsZero();
-        //每个地址只能抽奖一次，addressToWeight或addressToKey初始化过就不可以再参加
-        if (_addressToWeight[_msgSender()] != 0 || addressToKey[_msgSender()] != 0) revert RepeatedRequest(); //改成metx tx后，msg.sender改成签名的用户
-        //校验签名是否正确，确保weight是可信来源
+        // Every address can only draw once, addressToWeight or addressToKey is only initialized once
+        if (_addressToWeight[_msgSender()] != 0 || addressToKey[_msgSender()] != 0) revert RepeatedRequest();
+
+        // Verify the signature to ensure weight coming from trusted source
         if (!verifySignature(salt, _msgSender(), weight, signature)) revert InvalidSignature();
 
         RequestConfig memory rc = s_requestConfig;
@@ -129,7 +148,7 @@ contract WeightedRaffle is VRFConsumerBaseV2Upgradeable, NativeMetaTransaction, 
             rc.numWords
         );
 
-        //用以区分不同用户请求的随机数及其抽奖weight Return the requestId to the requester.
+        // Return the requestId to the requester.
         _requestIdToAddress[requestId] = _msgSender();
         _addressToWeight[_msgSender()] = weight;
 
@@ -137,152 +156,98 @@ contract WeightedRaffle is VRFConsumerBaseV2Upgradeable, NativeMetaTransaction, 
     }
 
     function fulfillRandomWords(uint256 requestId, uint256[] memory randomWords) internal override {
-        //weighted random sampling, solidity adjusted A-RES algorithm, weightedRandomKey
-        address _newAddress = _requestIdToAddress[requestId]; //这个局域变量是不是多余了，会浪费gas？
-
-        //ensure weightedRandomKey not be infinity through ranging randomSeed of 1 ~ 999,999
-        int256 randomSeed = int256(randomWords[0] % 1000000);
-
+        // Weighted random sampling, solidity adapted A-RES algorithm
+        // https://en.wikipedia.org/wiki/Reservoir_sampling#Algorithm_A-Res
+        address _newAddress = _requestIdToAddress[requestId];
+        int256 randomSeed = int256(randomWords[0] % 1e18);
         uint256 _weightedRandomKey;
 
-        // uint256 _weightedRandomKey = (
-        //     randomSeed == 0
-        //         ? type(uint256).max //log2(0) = infinity
-        //         : uint256(( 1e18 * (randomSeed.log2() - 1000000.log2()) ) / int256(_addressToWeight[_newAddress])).abs())
-        // );
+        /// In A-RES algorithm, the probablity equals to log(rand(0, 1)) / weight
+        if (randomSeed == 0)
+            _weightedRandomKey = type(uint256).max; // log(0) = infinity
+        else
+            _weightedRandomKey = uint256(-randomSeed.log2()) / _addressToWeight[_newAddress]; 
 
-        if (randomSeed == 0) {
-            _weightedRandomKey = type(uint256).max;
-        } else {
-            _weightedRandomKey = uint256(
-                (((1e18 * (randomSeed.log2() - int256(1000000).log2())) / int256(_addressToWeight[_newAddress])).abs())
-            );
-        }
-
-        //_weightedRandomKey must be greater than 0 to identity the address being waitlisted
-        //prevent edge case of _weightedRandomKey==0 when calculation result exceeding precision
+        // _weightedRandomKey must be greater than 0 to identity the address being waitlisted
+        // Prevent edge case of _weightedRandomKey == 0 when calculation result exceeding precision
         if (_weightedRandomKey == 0) {
             unchecked {
                 _weightedRandomKey = _weightedRandomKey + 1;
             }
         }
 
-        addressToKey[_newAddress] = _weightedRandomKey; //地址mapping到key，进入waitlist，以便后续比对更新蓄水池
+        addressToKey[_newAddress] = _weightedRandomKey; // add into waitlist for updating reservior later
+        // Prioritize filling unfilled reservoirs
+        if (winners.length < winnersNumber)
+            _fillReservior(_newAddress);
 
-        //优先填充未满的蓄水池
-        if (reserviorHeight < winnersLength) _fillReservior(_newAddress); //更新蓄水池中的地址及各参数
-
-        delete _requestIdToAddress[requestId]; //取得地址后不需要保留和requestID的关系
-        delete _addressToWeight[_newAddress]; //已记录key，可以删除weight节省gas
-
-        emit Fullfilled(_newAddress, randomSeed, _weightedRandomKey, addressToKey[_newAddress] == 0 ? false : true); //最后一项为0代表落选，为1代表在蓄水池或候选名单
+        delete _requestIdToAddress[requestId]; // delete after obtaining address
+        delete _addressToWeight[_newAddress]; // delete after recording weightedRandomKey
+        emit Fullfilled(_newAddress, randomSeed, _weightedRandomKey);
     }
 
-    //为了不受chainlink回调的gaslimit约束以及尽量减少高并发时不必要的链上状态改变，且A-Res算法采样的结果与顺序无关，故使用单独的更新蓄水池方法。
+    /// @notice Add waitlist user into reservior.
+    /// @dev Independent function to bear highest gas limit and avoid unnecessary on-chain call. 
+    /// A-Res result not impacted by calculation sequency.
+    /// @param waitlistAddress The address in waitlist to be added into reservior.
     function updateReservior(address waitlistAddress) external {
-        if (addressToIndex[waitlistAddress] != 0) revert AlreadyInReservior(); //校验是否addressToIndex有赋值，保证蓄水池中的地址不重复
-        if (addressToKey[waitlistAddress] == 0) revert NotListed(); //校验是否addressToKey有赋值，以确定是否在waitlist
+        if (winners[addressToIndex[waitlistAddress]] == waitlistAddress) revert AlreadyInReservior(); // check the existance of address in the array of winners
+        if (addressToKey[waitlistAddress] == 0) revert NotListed(); // check whether in the waitlist
 
-        //优先填充未满的蓄水池
-        if (reserviorHeight < winnersLength) {
+        // Prioritize filling unfilled reservoirs
+        if (winners.length < winnersNumber) {
             _fillReservior(waitlistAddress);
+        } else if (addressToKey[waitlistAddress] < maxWeightedRandomKey) { // check whether need to replace the user in the reservoir with waitlist user
+            // Remove replaced address's index, leave it in waitlist
+            delete addressToIndex[winners[lowestWinnerIndex]];  
+
+            // Replace lowest ranked winner in reservoir with waitlist user
+            addressToIndex[waitlistAddress] = lowestWinnerIndex;           
+            winners[lowestWinnerIndex] = waitlistAddress;
+
+            _updateReservior(); // update maxWeightedRandomKey with lowestWinnerIndex in the reservior
+            emit Updated(waitlistAddress, addressToIndex[waitlistAddress]);
         }
-        //check whether need to replace the user in the reservoir with waitlist user
-        else if (addressToKey[waitlistAddress] < maxWeightedRandomKey) {
-            //replace lowest ranked winner in reservoir with waitlist user
-            addressToIndex[waitlistAddress] = addressToIndex[winners[lowestWinnerIndex]]; //复制被代替者的Index
-
-            winners[lowestWinnerIndex] = waitlistAddress; //数组中老账户替换为新账户
-
-            _updateReservior(); //update maxWeightedRandomKey with lowestWinnerIndex in the reservior 更新lowestWinner数据
-
-            delete addressToIndex[winners[lowestWinnerIndex]]; //删除被代替者的Index，踢入waitlist
-        }
-
-        emit Updated(waitlistAddress, addressToIndex[waitlistAddress]); //最后一项为0代表未进蓄水池，非0代表进了蓄水池
     }
 
-    //***需要改为metx tx*** 某些用户希望退出抽奖，先退出蓄水池，再退出waitlist
+    /// @notice Any one can call this function to exit raffle irreversibly
     function exitRaffle() external {
         if (addressToKey[_msgSender()] == 0) revert NotListed();
 
-        //优先从蓄水池退出
-        if (addressToIndex[_msgSender()] > 0) {
-            //改成metx tx后，msg.sender改成签名的用户
-            uint256 _index = addressToIndex[_msgSender()] - 1;
+        // Exit from reservior if existing
+        if (winners[addressToIndex[_msgSender()]] == _msgSender()) {
+            uint256 tailIndex = winners.length - 1;
 
-            reserviorHeight--;
-
-            //蓄水中还有超过一个用户时需要重新排序
-            if (reserviorHeight > 1) {
-                //将数组最后一位补充上来，除非退出者刚好是最后一位
-                if (_index < reserviorHeight) {
-                    winners[_index] = winners[reserviorHeight];
-                    addressToIndex[winners[_index]] = addressToIndex[_msgSender()];
+            // Reorder when there is more than one user in the reservior.
+            if (winners.length > 1) {
+                // Replace the exited address with the last one in array and pop out it afterwards
+                // unless the exited address is the last one in array
+                if (addressToIndex[_msgSender()] < tailIndex) {
+                    addressToIndex[winners[tailIndex]] = addressToIndex[_msgSender()];
+                    winners[addressToIndex[_msgSender()]] = winners[tailIndex];
                 }
-
-                if (lowestWinnerIndex == _index) _updateReservior(); //如果删除的刚好是lowestWinner，要再更新一遍蓄水池最差值
             }
 
-            delete winners[reserviorHeight];
-            delete addressToIndex[_msgSender()]; //exit reservior 删除退出者的Index，退出蓄水池
+            winners.pop(); // pop out the tailIndex
+            
+            if (addressToIndex[_msgSender()] == lowestWinnerIndex)
+                _updateReservior(); // update reservior if lowestWinnerIndex exited
+
+            delete addressToIndex[_msgSender()]; // delete the reservior index of exited address
         }
 
-        _addressToWeight[_msgSender()] = 1; //mark exited address as randomWord requested
-
-        emit ExitRaffle(_msgSender(), reserviorHeight);
-
-        delete addressToKey[_msgSender()]; //exit waitlist forever
+        delete addressToKey[_msgSender()]; // exit waitlist
+        _addressToWeight[_msgSender()] = 1; // mark as requested
+        emit ExitRaffle(_msgSender(), winners.length);
     }
 
-    //update maxWeightedRandomKey with lowestWinnerIndex in the reservior
-    function _updateReservior() internal {
-        uint256 _lowestWinnerIndex;
-        uint256 _weightedRandomKey = addressToKey[winners[_lowestWinnerIndex]];
-
-        for (uint256 i = 1; i < reserviorHeight; i++) {
-            if (addressToKey[winners[i]] > _weightedRandomKey) {
-                _weightedRandomKey = addressToKey[winners[i]];
-                _lowestWinnerIndex = i;
-            }
-        }
-
-        maxWeightedRandomKey = _weightedRandomKey;
-        lowestWinnerIndex = _lowestWinnerIndex;
-
-        emit UpdateReservior(winners[lowestWinnerIndex], maxWeightedRandomKey, lowestWinnerIndex);
-    }
-
-    function _fillReservior(address newAddress_) internal {
-        //add new user into reservior
-        winners[reserviorHeight] = newAddress_;
-
-        //update maxWeightedRandomKey with lowestWinnerIndex in the reservior
-        if (addressToKey[newAddress_] > maxWeightedRandomKey) {
-            maxWeightedRandomKey = addressToKey[newAddress_];
-            lowestWinnerIndex = reserviorHeight;
-        }
-
-        reserviorHeight++; //update the height of reservoir
-        addressToIndex[newAddress_] = reserviorHeight; //记录用户在winners数组中的位置，1 ~ winnersLength
-
-        emit FillReservior(
-            newAddress_,
-            addressToKey[newAddress_],
-            reserviorHeight,
-            winners[lowestWinnerIndex],
-            maxWeightedRandomKey,
-            lowestWinnerIndex
-        );
-    }
-
-    function setWinnersLength(uint256 length) external onlyOwner {
+    /// @notice Admin can change number of winners before the start of raffle.
+    /// @param number The new number of winners.
+    function setWinnersNumber(uint256 number) external onlyOwner {
         if (block.timestamp >= startTime) revert AlreadyStart();
-        if (length == 0) revert NoWinner();
+        if (number == 0) revert NoWinner();
 
-        if (length > winnersLength) winners = new address[](length);
-
-        winnersLength = length;
+        winnersNumber = number;
     }
 
     function setTime(uint256 startTime_, uint256 endTime_) external onlyOwner {
@@ -293,9 +258,7 @@ contract WeightedRaffle is VRFConsumerBaseV2Upgradeable, NativeMetaTransaction, 
         endTime = endTime_;
     }
 
-    /**
-    @notice update the endTime to ethier extend the raffle or end it early.
-     */
+    /// @notice Update the endTime to ethier extend the raffle or end it earlier.
     function setEndTime(uint256 endTime_) external onlyOwner {
         if (block.timestamp >= endTime) revert AlreadyEnd();
         if (startTime >= endTime_ || block.timestamp >= endTime_) revert IncorrectTime();
@@ -320,6 +283,51 @@ contract WeightedRaffle is VRFConsumerBaseV2Upgradeable, NativeMetaTransaction, 
         bytes32 rawMessageHash = _getMessageHash(_salt, _userAddress, weight);
 
         return _recover(rawMessageHash, signature) == signer;
+    }
+
+    /// @dev Add new address into unfilled reservior
+    function _fillReservior(address newAddress_) internal {
+        if (newAddress_ == address(0)) revert ZeroAddress();
+
+        //add new user into reservior
+        winners.push(newAddress_);
+        addressToIndex[newAddress_] = winners.length - 1;
+
+        //update maxWeightedRandomKey with lowestWinnerIndex in the reservior
+        if (addressToKey[newAddress_] > maxWeightedRandomKey) {
+            maxWeightedRandomKey = addressToKey[newAddress_];
+            lowestWinnerIndex = winners.length - 1;
+        }
+
+        emit FillReservior(
+            newAddress_,
+            addressToKey[newAddress_],
+            winners.length,
+            winners[lowestWinnerIndex],
+            maxWeightedRandomKey,
+            lowestWinnerIndex
+        );
+    }
+
+    /// @dev update maxWeightedRandomKey with lowestWinnerIndex in the reservior
+    function _updateReservior() internal {
+        if (winners.length == 0) return;
+
+        // winners[0] as default lowest ranked winner
+        uint256 _lowestWinnerIndex = 0; 
+        uint256 _weightedRandomKey = addressToKey[winners[0]];
+
+        for (uint256 i = 1; i < winners.length; i++) {
+            if (addressToKey[winners[i]] > _weightedRandomKey) {
+                _weightedRandomKey = addressToKey[winners[i]];
+                _lowestWinnerIndex = i;
+            }
+        }
+
+        maxWeightedRandomKey = _weightedRandomKey;
+        lowestWinnerIndex = _lowestWinnerIndex;
+
+        emit UpdateReservior(winners[_lowestWinnerIndex], _weightedRandomKey, _lowestWinnerIndex);
     }
 
     function _getMessageHash(
