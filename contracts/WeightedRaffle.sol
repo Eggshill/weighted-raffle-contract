@@ -225,6 +225,7 @@ contract WeightedRaffle is VRFConsumerBaseV2Upgradeable, NativeMetaTransaction, 
                 if (addressToIndex[_msgSender()] < tailIndex) {
                     addressToIndex[winners[tailIndex]] = addressToIndex[_msgSender()];
                     winners[addressToIndex[_msgSender()]] = winners[tailIndex];
+                    if (lowestWinnerIndex == tailIndex) lowestWinnerIndex = addressToIndex[_msgSender()];
                 }
             }
 
